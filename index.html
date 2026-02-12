@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>列车维护管理系统 - 换油专用版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { overflow-x: hidden; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        table { table-layout: fixed; }
+        th, td { word-break: break-all; }
+        .status-red { background-color: #fee2e2; color: #dc2626; }
+        .status-orange { background-color: #fff7e6; color: #f97316; }
+        .status-blue { background-color: #dbeafe; color: #2563eb; }
+        .status-green { background-color: #ecfdf5; color: #059669; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<div class="min-h-screen flex flex-col">
+    <!-- 顶部 -->
+    <header class="bg-white shadow px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <i class="fa fa-train text-blue-600 text-xl"></i>
+            <div>
+                <h1 class="text-lg font-semibold">列车维护管理系统</h1>
+                <p class="text-xs text-gray-500">25列列车 | 换油管理专用版</p>
+            </div>
+        </div>
+        <div class="text-sm text-gray-600 flex items-center gap-3">
+            <span id="currentDate"></span>
+            <span>管理员</span>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- 左侧菜单 -->
+        <aside class="w-56 bg-white shadow-sm h-[calc(100vh-60px)] sticky top-0 overflow-y-auto">
+            <nav class="p-2 space-y-1">
+                <a onclick="goTab('dashboard')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer bg-blue-50 text-blue-600">
+                    <i class="fa fa-dashboard w-5"></i><span>仪表盘</span>
+                </a>
+                <a onclick="goTab('train')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer">
+                    <i class="fa fa-train w-5"></i><span>列车管理</span>
+                </a>
+                <a onclick="goTab('params')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer">
+                    <i class="fa fa-sliders w-5"></i><span>换油参数</span>
+                </a>
+                <a onclick="goTab('plan')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer">
+                    <i class="fa fa-calendar w-5"></i><span>换油计划</span>
+                </a>
+                <a onclick="goTab('analysis')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer">
+                    <i class="fa fa-bar-chart w-5"></i><span>换油分析</span>
+                </a>
+                <a onclick="goTab('history')" class="nav-btn flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-100 cursor-pointer">
+                    <i class="fa fa-history w-5"></i><span>换油记录</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 主内容 -->
+        <main class="flex-1 p-4 overflow-y-auto h-[calc(100vh-60px)]">
+            <!-- 仪表盘 -->
+            <section id="dashboard" class="tab-content active">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="bg-white rounded shadow p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-medium">列车总数</h3>
+                            <i class="fa fa-train text-blue-600"></i>
+                        </div>
+                        <p class="text-2xl font-bold">25</p>
+                        <p class="text-xs text-gray-500">001002 ~ 049050</p>
+                    </div>
+                    <div class="bg-white rounded shadow p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-medium">超期换油提醒</h3>
+                            <i class="fa fa-exclamation-circle text-red-600"></i>
+                        </div>
+                        <p class="text-2xl font-bold text-red-600" id="overdueCount">0</p>
+                        <p class="text-xs text-gray-500">3级提醒：需立即处理</p>
+                    </div>
+                    <div class="bg-white rounded shadow p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-medium">本月换油计划</h3>
+                            <i class="fa fa-calendar-check-o text-orange-600"></i>
+                        </div>
+                        <p class="text-2xl font-bold text-orange-600" id="monthPlanCount">0</p>
+                        <p class="text-xs text-gray-500">1-2级提醒</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white rounded shadow p-4">
+                        <h3 class="font-medium mb-3">换油状态分布</h3>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div class="status-red p-2 rounded text-center">
+                                <div class="font-bold" id="statusRed">0</div>
+                                <div>已超期</div>
+                            </div>
+                            <div class="status-orange p-2 rounded text-center">
+                                <div class="font-bold" id="statusOrange">0</div>
+                                <div>1周内</div>
+                            </div>
+                            <div class="status-blue p-2 rounded text-center">
+                                <div class="font-bold" id="statusBlue">0</div>
+                                <div>1个月内</div>
+                            </div>
+                            <div class="status-green p-2 rounded text-center">
+                                <div class="font-bold" id="statusGreen">0</div>
+                                <div>正常</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded shadow p-4">
+                        <h3 class="font-medium mb-3">换油类型占比</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between items-center">
+                                <span>齿轮箱油</span>
+                                <span class="font-medium" id="gearRatio">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" id="gearBar" style="width:0%"></div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span>空压机油</span>
+                                <span class="font-medium" id="airRatio">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-green-600 h-2 rounded-full" id="airBar" style="width:0%"></div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span>牵引电机油</span>
+                                <span class="font-medium" id="tracRatio">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-purple-600 h-2 rounded-full" id="tracBar" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded shadow p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-medium">紧急换油提醒（TOP10）</h3>
+                        <button onclick="exportExcel('all')" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                            <i class="fa fa-download mr-1"></i>导出全部换油数据
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border text-sm" style="min-width:700px">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-1">车号</th>
+                                    <th class="border p-1">换油类型</th>
+                                    <th class="border p-1">状态</th>
+                                    <th class="border p-1">剩余天数</th>
+                                    <th class="border p-1">剩余公里</th>
+                                </tr>
+                            </thead>
+                            <tbody id="urgentTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 列车管理 -->
+            <section id="train" class="tab-content">
+                <div class="bg-white rounded shadow p-4 mb-4">
+                    <div class="flex justify-between mb-3">
+                        <h2 class="font-medium">列车换油信息管理</h2>
+                        <div class="flex gap-2">
+                            <button onclick="openImport()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                <i class="fa fa-upload mr-1"></i>导入公里数
+                            </button>
+                            <button onclick="exportExcel('train')" class="bg-green-600 text-white px-3 py-1 rounded text-sm">
+                                <i class="fa fa-download mr-1"></i>导出列车换油数据
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border text-sm" style="min-width:800px">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-1">车号</th>
+                                    <th class="border p-1">当前里程</th>
+                                    <th class="border p-1">齿轮箱油</th>
+                                    <th class="border p-1">空压机油</th>
+                                    <th class="border p-1">牵引电机油</th>
+                                    <th class="border p-1">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trainTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 参数配置 -->
+            <section id="params" class="tab-content">
+                <div class="bg-white rounded shadow p-4">
+                    <h2 class="font-medium mb-3">换油周期设置</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div class="border p-3 rounded">
+                            <label class="block font-medium mb-2">齿轮箱油</label>
+                            <div class="flex gap-3 mb-2">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">时间间隔（天）</label>
+                                    <input type="number" id="gearTime" class="border p-1 w-20 rounded" value="180" min="1">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">里程间隔（公里）</label>
+                                    <input type="number" id="gearMile" class="border p-1 w-20 rounded" value="3000" min="1">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border p-3 rounded">
+                            <label class="block font-medium mb-2">空压机油</label>
+                            <div class="flex gap-3 mb-2">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">时间间隔（天）</label>
+                                    <input type="number" id="airTime" class="border p-1 w-20 rounded" value="120" min="1">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">里程间隔（公里）</label>
+                                    <input type="number" id="airMile" class="border p-1 w-20 rounded" value="2500" min="1">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border p-3 rounded">
+                            <label class="block font-medium mb-2">牵引电机油</label>
+                            <div class="flex gap-3 mb-2">
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">时间间隔（天）</label>
+                                    <input type="number" id="tracTime" class="border p-1 w-20 rounded" value="240" min="1">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-500 block mb-1">里程间隔（公里）</label>
+                                    <input type="number" id="tracMile" class="border p-1 w-20 rounded" value="4000" min="1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="saveParams()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded text-sm">保存换油配置</button>
+                </div>
+            </section>
+
+            <!-- 换油计划 -->
+            <section id="plan" class="tab-content">
+                <div class="bg-white rounded shadow p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="font-medium">换油计划一览</h2>
+                        <button onclick="exportExcel('plan')" class="bg-green-600 text-white px-3 py-1 rounded text-sm">
+                            <i class="fa fa-download mr-1"></i>导出换油计划数据
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border text-sm" style="min-width:700px">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-1">车号</th>
+                                    <th class="border p-1">换油类型</th>
+                                    <th class="border p-1">上次换油日期</th>
+                                    <th class="border p-1">上次换油人</th>
+                                    <th class="border p-1">状态</th>
+                                    <th class="border p-1">剩余天数</th>
+                                    <th class="border p-1">剩余公里</th>
+                                </tr>
+                            </thead>
+                            <tbody id="planTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 换油分析 -->
+            <section id="analysis" class="tab-content">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-white rounded shadow p-4">
+                        <h3 class="font-medium mb-3">各类型换油次数统计</h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between items-center">
+                                <span>齿轮箱油更换</span>
+                                <span class="font-bold" id="gearChangeCount">0</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-600 h-2 rounded-full" id="gearChangeBar" style="width:0%"></div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span>空压机油更换</span>
+                                <span class="font-bold" id="airChangeCount">0</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-green-600 h-2 rounded-full" id="airChangeBar" style="width:0%"></div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span>牵引电机油更换</span>
+                                <span class="font-bold" id="tracChangeCount">0</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-purple-600 h-2 rounded-full" id="tracChangeBar" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded shadow p-4">
+                        <h3 class="font-medium mb-3">换油人员工作量统计</h3>
+                        <div id="workerStats" class="space-y-2 text-sm">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded shadow p-4">
+                    <h3 class="font-medium mb-3">换油周期分析</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border text-sm" style="min-width:700px">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-1">换油类型</th>
+                                    <th class="border p-1">平均更换周期（天）</th>
+                                    <th class="border p-1">平均更换里程（公里）</th>
+                                    <th class="border p-1">最短周期（天）</th>
+                                    <th class="border p-1">最长周期（天）</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cycleTable">
+                                <tr>
+                                    <td class="border p-1">齿轮箱油</td>
+                                    <td class="border p-1" id="gearAvgCycle">0</td>
+                                    <td class="border p-1" id="gearAvgMile">0</td>
+                                    <td class="border p-1" id="gearMinCycle">0</td>
+                                    <td class="border p-1" id="gearMaxCycle">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-1">空压机油</td>
+                                    <td class="border p-1" id="airAvgCycle">0</td>
+                                    <td class="border p-1" id="airAvgMile">0</td>
+                                    <td class="border p-1" id="airMinCycle">0</td>
+                                    <td class="border p-1" id="airMaxCycle">0</td>
+                                </tr>
+                                <tr>
+                                    <td class="border p-1">牵引电机油</td>
+                                    <td class="border p-1" id="tracAvgCycle">0</td>
+                                    <td class="border p-1" id="tracAvgMile">0</td>
+                                    <td class="border p-1" id="tracMinCycle">0</td>
+                                    <td class="border p-1" id="tracMaxCycle">0</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 换油记录 -->
+            <section id="history" class="tab-content">
+                <div class="bg-white rounded shadow p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="font-medium">换油历史记录</h2>
+                        <button onclick="exportExcel('history')" class="bg-green-600 text-white px-3 py-1 rounded text-sm">
+                            <i class="fa fa-download mr-1"></i>导出换油历史数据
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border text-sm" style="min-width:800px">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="border p-1">车号</th>
+                                    <th class="border p-1">换油类型</th>
+                                    <th class="border p-1">换油日期</th>
+                                    <th class="border p-1">换油人</th>
+                                    <th class="border p-1">换油里程</th>
+                                    <th class="border p-1">更换次数</th>
+                                    <th class="border p-1">取样位置</th>
+                                    <th class="border p-1">备注</th>
+                                    <th class="border p-1">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTable">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<!-- 导入弹窗 -->
+<div id="importModal" class="fixed inset-0 bg-black bg-opacity-30 hidden justify-center items-center z-50">
+    <div class="bg-white rounded shadow w-full max-w-xl p-4">
+        <div class="flex justify-between mb-2">
+            <h3 class="font-medium">一键导入公里数（Excel竖列复制粘贴）</h3>
+            <button onclick="closeImport()" class="text-gray-500 text-lg cursor-pointer">×</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="text-sm block mb-1">列车车号</label>
+                <textarea id="importTrainNos" rows="8" class="w-full border p-2 font-mono text-sm"></textarea>
+            </div>
+            <div>
+                <label class="text-sm block mb-1">最新公里数</label>
+                <textarea id="importMiles" rows="8" class="w-full border p-2 font-mono text-sm"></textarea>
+            </div>
+        </div>
+        <div class="mt-3 text-right">
+            <button onclick="doImport()" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">确认导入</button>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="editModal" class="fixed inset-0 bg-black bg-opacity-30 hidden justify-center items-center z-50">
+    <div class="bg-white rounded shadow w-full max-w-2xl p-4">
+        <div class="flex justify-between mb-3">
+            <h3 class="font-medium" id="editTitle">编辑换油记录</h3>
+            <button onclick="closeEdit()" class="text-gray-500 text-lg cursor-pointer">×</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm" id="editForm">
+            <input type="hidden" id="editTrainNo">
+            <input type="hidden" id="editType">
+            
+            <div>
+                <label class="block mb-1">列车车号</label>
+                <input type="text" id="editTrainNoView" class="w-full border p-2 rounded" readonly>
+            </div>
+            <div>
+                <label class="block mb-1">换油类型</label>
+                <input type="text" id="editTypeView" class="w-full border p-2 rounded" readonly>
+            </div>
+            <div>
+                <label class="block mb-1">换油日期</label>
+                <input type="date" id="editDate" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block mb-1">换油人</label>
+                <input type="text" id="editWorker" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block mb-1">换油里程（公里）</label>
+                <input type="number" id="editMile" class="w-full border p-2 rounded" min="0">
+            </div>
+            <div>
+                <label class="block mb-1">更换次数</label>
+                <input type="number" id="editCount" class="w-full border p-2 rounded" min="0">
+            </div>
+            <div>
+                <label class="block mb-1">取样位置</label>
+                <input type="text" id="editPosition" class="w-full border p-2 rounded">
+            </div>
+            <div>
+                <label class="block mb-1">备注</label>
+                <textarea id="editRemark" rows="2" class="w-full border p-2 rounded"></textarea>
+            </div>
+        </div>
+        <div class="mt-4 text-right">
+            <button onclick="saveEdit()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// 全局数据
+let trainData = [];
+let historyData = [];
+let params = {};
+let statusCount = { red: 0, orange: 0, blue: 0, green: 0 };
+let typeCount = { gear: 0, air: 0, trac: 0 };
+
+// 初始化
+window.onload = function () {
+    // 设置当前日期
+    document.getElementById('currentDate').textContent = new Date().toLocaleDateString('zh-CN');
+    
+    // 初始化数据
+    initData();
+    loadParams();
+    
+    // 渲染所有页面
+    renderDashboard();
+    renderTrain();
+    renderPlan();
+    renderAnalysis();
+    renderHistory();
+};
+
+// 初始化基础数据
+function initData() {
+    // 列车基础数据
+    let localTrain = localStorage.getItem('trainDataFull');
+    if (localTrain) {
+        trainData = JSON.parse(localTrain);
+        // 兼容旧数据，移除wheel相关字段
+        trainData = trainData.map(train => {
+            delete train.wheel;
+            return train;
+        });
+    } else {
+        trainData = [];
+        for (let i = 1; i <= 25; i++) {
+            let a = String(i * 2 - 1).padStart(3, '0');
+            let b = String(i * 2).padStart(3, '0');
+            let no = a + b;
+            let baseMile = 10000 + Math.floor(Math.random() * 8000);
+            
+            trainData.push({
+                no: no,
+                mile: baseMile,
+                gear: { date: '2025-01-10', mile: baseMile - 2000, worker: '操作员' + (i % 8 + 1), count: 3, position: '左侧齿轮箱' },
+                air: { date: '2025-02-01', mile: baseMile - 1500, worker: '操作员' + (i % 8 + 1), count: 5, position: '主空压机' },
+                trac: { date: '2024-12-15', mile: baseMile - 2500, worker: '操作员' + (i % 8 + 1), count: 2, position: '牵引电机1#位' }
+            });
+        }
+    }
+    saveTrain();
+
+    // 历史记录数据
+    let localHistory = localStorage.getItem('historyDataFull');
+    if (localHistory) {
+        historyData = JSON.parse(localHistory);
+        // 兼容旧数据，过滤掉wheel类型记录
+        historyData = historyData.filter(item => item.type !== 'wheel');
+    } else {
+        historyData = [];
+        // 初始化历史记录
+        trainData.forEach(train => {
+            ['gear', 'air', 'trac'].forEach(type => {
+                let typeName = {
+                    gear: '齿轮箱油',
+                    air: '空压机油',
+                    trac: '牵引电机油'
+                }[type];
+                
+                historyData.push({
+                    no: train.no,
+                    type: type,
+                    typeName: typeName,
+                    date: train[type].date,
+                    worker: train[type].worker,
+                    mile: train[type].mile,
+                    count: train[type].count,
+                    position: train[type].position,
+                    remark: ''
+                });
+            });
+        });
+    }
+    saveHistory();
+}
+
+// 保存数据
+function saveTrain() { localStorage.setItem('trainDataFull', JSON.stringify(trainData)); }
+function saveHistory() { localStorage.setItem('historyDataFull', JSON.stringify(historyData)); }
+
+// 加载参数
+function loadParams() {
+    let p = localStorage.getItem('mainParamsFull');
+    if (p) {
+        params = JSON.parse(p);
+        // 兼容旧数据，移除wheel相关参数
+        delete params.wheelTime;
+        delete params.wheelMile;
+        document.getElementById('gearTime').value = params.gearTime;
+        document.getElementById('gearMile').value = params.gearMile;
+        document.getElementById('airTime').value = params.airTime;
+        document.getElementById('airMile').value = params.airMile;
+        document.getElementById('tracTime').value = params.tracTime;
+        document.getElementById('tracMile').value = params.tracMile;
+    } else {
+        params = {
+            gearTime: 180, gearMile: 3000,
+            airTime: 120, airMile: 2500,
+            tracTime: 240, tracMile: 4000
+        };
+    }
+}
+
+// 保存参数
+function saveParams() {
+    params = {
+        gearTime: +document.getElementById('gearTime').value,
+        gearMile: +document.getElementById('gearMile').value,
+        airTime: +document.getElementById('airTime').value,
+        airMile: +document.getElementById('airMile').value,
+        tracTime: +document.getElementById('tracTime').value,
+        tracMile: +document.getElementById('tracMile').value
+    };
+    localStorage.setItem('mainParamsFull', JSON.stringify(params));
+    
+    // 重新渲染所有页面
+    renderDashboard();
+    renderPlan();
+    renderAnalysis();
+    
+    alert('换油参数保存成功！');
+}
+
+// 切换页面
+function goTab(id) {
+    // 重置菜单样式
+    document.querySelectorAll('.nav-btn').forEach(el => {
+        el.classList.remove('bg-blue-50', 'text-blue-600');
+    });
+    // 设置当前菜单样式
+    event.target.closest('.nav-btn').classList.add('bg-blue-50', 'text-blue-600');
+    
+    // 切换内容
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+// 计算日期差
+function dayDiff(d, t = new Date()) {
+    let diff = new Date(d) - t;
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+// 获取状态类名和文本
+function getStatus(day, leftMile) {
+    if (day <= 0 || leftMile <= 0) return { cls: 'status-red', text: '已超期', type: 'red' };
+    if (day <= 7) return { cls: 'status-orange', text: '1周内', type: 'orange' };
+    if (day <= 30) return { cls: 'status-blue', text: '1个月内', type: 'blue' };
+    return { cls: 'status-green', text: '正常', type: 'green' };
+}
+
+// 渲染仪表盘
+function renderDashboard() {
+    // 重置计数
+    statusCount = { red: 0, orange: 0, blue: 0, green: 0 };
+    typeCount = { gear: 0, air: 0, trac: 0 };
+    
+    let urgentList = [];
+    let today = new Date();
+    
+    // 计算统计数据
+    trainData.forEach(train => {
+        ['gear', 'air', 'trac'].forEach(type => {
+            let day = dayDiff(train[type].date, today) + params[`${type}Time`];
+            let leftMile = params[`${type}Mile`] - (train.mile - train[type].mile);
+            let status = getStatus(day, leftMile);
+            
+            // 状态计数
+            statusCount[status.type]++;
+            // 类型计数
+            typeCount[type]++;
+            
+            // 紧急列表
+            if (status.type !== 'green') {
+                urgentList.push({
+                    no: train.no,
+                    typeName: { gear: '齿轮箱油', air: '空压机油', trac: '牵引电机油' }[type],
+                    status: status.text,
+                    statusCls: status.cls,
+                    day: Math.max(0, day),
+                    mile: Math.max(0, leftMile)
+                });
+            }
+        });
+    });
+    
+    // 更新计数显示
+    document.getElementById('overdueCount').textContent = statusCount.red;
+    
+    // 计算本月计划数
+    let monthPlan = statusCount.red + statusCount.orange + statusCount.blue;
+    document.getElementById('monthPlanCount').textContent = monthPlan;
+    
+    // 状态分布
+    document.getElementById('statusRed').textContent = statusCount.red;
+    document.getElementById('statusOrange').textContent = statusCount.orange;
+    document.getElementById('statusBlue').textContent = statusCount.blue;
+    document.getElementById('statusGreen').textContent = statusCount.green;
+    
+    // 类型占比
+    let totalType = typeCount.gear + typeCount.air + typeCount.trac;
+    let gearRatio = Math.round((typeCount.gear / totalType) * 100);
+    let airRatio = Math.round((typeCount.air / totalType) * 100);
+    let tracRatio = Math.round((typeCount.trac / totalType) * 100);
+    
+    document.getElementById('gearRatio').textContent = `${gearRatio}%`;
+    document.getElementById('gearBar').style.width = `${gearRatio}%`;
+    document.getElementById('airRatio').textContent = `${airRatio}%`;
+    document.getElementById('airBar').style.width = `${airRatio}%`;
+    document.getElementById('tracRatio').textContent = `${tracRatio}%`;
+    document.getElementById('tracBar').style.width = `${tracRatio}%`;
+    
+    // 紧急列表（TOP10）
+    urgentList.sort((a, b) => {
+        let statusOrder = { red: 0, orange: 1, blue: 2 };
+        let aType = a.statusCls.split('-')[1];
+        let bType = b.statusCls.split('-')[1];
+        if (statusOrder[aType] !== statusOrder[bType]) return statusOrder[aType] - statusOrder[bType];
+        return a.day - b.day;
+    });
+    
+    let urgentHtml = '';
+    urgentList.slice(0, 10).forEach(item => {
+        urgentHtml += `<tr>
+            <td class="border p-1">${item.no}</td>
+            <td class="border p-1">${item.typeName}</td>
+            <td class="border p-1 ${item.statusCls}">${item.status}</td>
+            <td class="border p-1">${item.day}</td>
+            <td class="border p-1">${item.mile}</td>
+        </tr>`;
+    });
+    document.getElementById('urgentTable').innerHTML = urgentHtml;
+}
+
+// 渲染列车管理
+function renderTrain() {
+    let html = '';
+    trainData.forEach(train => {
+        html += `<tr>
+            <td class="border p-1 font-medium">${train.no}</td>
+            <td class="border p-1">${train.mile}</td>
+            <td class="border p-1 text-xs">${train.gear.date}<br>${train.gear.worker}</td>
+            <td class="border p-1 text-xs">${train.air.date}<br>${train.air.worker}</td>
+            <td class="border p-1 text-xs">${train.trac.date}<br>${train.trac.worker}</td>
+            <td class="border p-1">
+                <button onclick="editRecord('${train.no}', 'gear', '齿轮箱油')" class="text-blue-600 text-xs">编辑</button> |
+                <button onclick="editRecord('${train.no}', 'air', '空压机油')" class="text-blue-600 text-xs">编辑</button> |
+                <button onclick="editRecord('${train.no}', 'trac', '牵引电机油')" class="text-blue-600 text-xs">编辑</button>
+            </td>
+        </tr>`;
+    });
+    document.getElementById('trainTable').innerHTML = html;
+}
+
+// 渲染换油计划
+function renderPlan() {
+    let html = '';
+    trainData.forEach(train => {
+        ['gear', 'air', 'trac'].forEach(type => {
+            let typeName = { gear: '齿轮箱油', air: '空压机油', trac: '牵引电机油' }[type];
+            let day = dayDiff(train[type].date) + params[`${type}Time`];
+            let leftMile = params[`${type}Mile`] - (train.mile - train[type].mile);
+            let status = getStatus(day, leftMile);
+            
+            html += `<tr>
+                <td class="border p-1">${train.no}</td>
+                <td class="border p-1">${typeName}</td>
+                <td class="border p-1">${train[type].date}</td>
+                <td class="border p-1">${train[type].worker}</td>
+                <td class="border p-1 ${status.cls}">${status.text}</td>
+                <td class="border p-1">${Math.max(0, day)}</td>
+                <td class="border p-1">${Math.max(0, leftMile)}</td>
+            </tr>`;
+        });
+    });
+    document.getElementById('planTable').innerHTML = html;
+}
+
+// 渲染换油分析
+function renderAnalysis() {
+    // 统计各类型更换次数
+    let gearChange = 0, airChange = 0, tracChange = 0;
+    historyData.forEach(item => {
+        if (item.type === 'gear') gearChange += item.count;
+        if (item.type === 'air') airChange += item.count;
+        if (item.type === 'trac') tracChange += item.count;
+    });
+    
+    let totalChange = gearChange + airChange + tracChange;
+    let gearRatio = totalChange > 0 ? Math.round((gearChange / totalChange) * 100) : 0;
+    let airRatio = totalChange > 0 ? Math.round((airChange / totalChange) * 100) : 0;
+    let tracRatio = totalChange > 0 ? Math.round((tracChange / totalChange) * 100) : 0;
+    
+    document.getElementById('gearChangeCount').textContent = gearChange;
+    document.getElementById('gearChangeBar').style.width = `${gearRatio}%`;
+    document.getElementById('airChangeCount').textContent = airChange;
+    document.getElementById('airChangeBar').style.width = `${airRatio}%`;
+    document.getElementById('tracChangeCount').textContent = tracChange;
+    document.getElementById('tracChangeBar').style.width = `${tracRatio}%`;
+    
+    // 作业人员统计
+    let workerStats = {};
+    historyData.forEach(item => {
+        if (!workerStats[item.worker]) workerStats[item.worker] = 0;
+        workerStats[item.worker] += item.count;
+    });
+    
+    let workerHtml = '';
+    Object.keys(workerStats).sort((a, b) => workerStats[b] - workerStats[a]).forEach(worker => {
+        let ratio = Math.round((workerStats[worker] / totalChange) * 100);
+        workerHtml += `<div class="flex justify-between items-center mb-1">
+            <span>${worker}</span>
+            <span class="font-bold">${workerStats[worker]}次</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+            <div class="bg-teal-600 h-2 rounded-full" style="width:${ratio}%"></div>
+        </div>`;
+    });
+    document.getElementById('workerStats').innerHTML = workerHtml;
+    
+    // 周期分析
+    // 齿轮箱油
+    let gearCycles = historyData.filter(item => item.type === 'gear').map(item => {
+        let lastDate = new Date(item.date);
+        let today = new Date();
+        return Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+    });
+    document.getElementById('gearAvgCycle').textContent = gearCycles.length ? Math.round(gearCycles.reduce((a, b) => a + b) / gearCycles.length) : 0;
+    document.getElementById('gearAvgMile').textContent = params.gearMile;
+    document.getElementById('gearMinCycle').textContent = gearCycles.length ? Math.min(...gearCycles) : 0;
+    document.getElementById('gearMaxCycle').textContent = gearCycles.length ? Math.max(...gearCycles) : 0;
+    
+    // 空压机油
+    let airCycles = historyData.filter(item => item.type === 'air').map(item => {
+        let lastDate = new Date(item.date);
+        let today = new Date();
+        return Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+    });
+    document.getElementById('airAvgCycle').textContent = airCycles.length ? Math.round(airCycles.reduce((a, b) => a + b) / airCycles.length) : 0;
+    document.getElementById('airAvgMile').textContent = params.airMile;
+    document.getElementById('airMinCycle').textContent = airCycles.length ? Math.min(...airCycles) : 0;
+    document.getElementById('airMaxCycle').textContent = airCycles.length ? Math.max(...airCycles) : 0;
+    
+    // 牵引电机油
+    let tracCycles = historyData.filter(item => item.type === 'trac').map(item => {
+        let lastDate = new Date(item.date);
+        let today = new Date();
+        return Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+    });
+    document.getElementById('tracAvgCycle').textContent = tracCycles.length ? Math.round(tracCycles.reduce((a, b) => a + b) / tracCycles.length) : 0;
+    document.getElementById('tracAvgMile').textContent = params.tracMile;
+    document.getElementById('tracMinCycle').textContent = tracCycles.length ? Math.min(...tracCycles) : 0;
+    document.getElementById('tracMaxCycle').textContent = tracCycles.length ? Math.max(...tracCycles) : 0;
+}
+
+// 渲染换油记录
+function renderHistory() {
+    let html = '';
+    historyData.forEach(item => {
+        html += `<tr>
+            <td class="border p-1">${item.no}</td>
+            <td class="border p-1">${item.typeName}</td>
+            <td class="border p-1">${item.date}</td>
+            <td class="border p-1">${item.worker}</td>
+            <td class="border p-1">${item.mile}</td>
+            <td class="border p-1">${item.count}</td>
+            <td class="border p-1">${item.position}</td>
+            <td class="border p-1">${item.remark || '-'}</td>
+            <td class="border p-1">
+                <button onclick="editHistory('${item.no}', '${item.type}', '${item.typeName}')" class="text-blue-600 text-xs">编辑</button>
+            </td>
+        </tr>`;
+    });
+    document.getElementById('historyTable').innerHTML = html;
+}
+
+// 导入功能
+function openImport() { document.getElementById('importModal').classList.remove('hidden'); }
+function closeImport() { document.getElementById('importModal').classList.add('hidden'); }
+function doImport() {
+    let nos = document.getElementById('importTrainNos').value.trim().split('\n').map(x => x.trim());
+    let miles = document.getElementById('importMiles').value.trim().split('\n').map(x => x.trim());
+    
+    if (nos.length !== miles.length) {
+        alert('车号与公里数行数不一致！');
+        return;
+    }
+    
+    let count = 0;
+    nos.forEach((no, i) => {
+        let idx = trainData.findIndex(x => x.no === no);
+        if (idx !== -1 && !isNaN(miles[i])) {
+            trainData[idx].mile = +miles[i];
+            count++;
+        }
+    });
+    
+    saveTrain();
+    renderDashboard();
+    renderTrain();
+    renderPlan();
+    renderAnalysis();
+    
+    closeImport();
+    alert(`成功导入 ${count} 条公里数数据！`);
+}
+
+// 编辑记录
+function editRecord(no, type, typeName) {
+    let train = trainData.find(x => x.no === no);
+    if (!train) return;
+    
+    document.getElementById('editTrainNo').value = no;
+    document.getElementById('editType').value = type;
+    document.getElementById('editTrainNoView').value = no;
+    document.getElementById('editTypeView').value = typeName;
+    document.getElementById('editDate').value = train[type].date;
+    document.getElementById('editWorker').value = train[type].worker;
+    document.getElementById('editMile').value = train[type].mile;
+    document.getElementById('editCount').value = train[type].count;
+    document.getElementById('editPosition').value = train[type].position;
+    document.getElementById('editRemark').value = '';
+    
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+// 编辑历史记录
+function editHistory(no, type, typeName) {
+    let record = historyData.find(x => x.no === no && x.type === type);
+    if (!record) return;
+    
+    document.getElementById('editTrainNo').value = no;
+    document.getElementById('editType').value = type;
+    document.getElementById('editTrainNoView').value = no;
+    document.getElementById('editTypeView').value = typeName;
+    document.getElementById('editDate').value = record.date;
+    document.getElementById('editWorker').value = record.worker;
+    document.getElementById('editMile').value = record.mile;
+    document.getElementById('editCount').value = record.count;
+    document.getElementById('editPosition').value = record.position;
+    document.getElementById('editRemark').value = record.remark;
+    
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+// 关闭编辑弹窗
+function closeEdit() { document.getElementById('editModal').classList.add('hidden'); }
+
+// 保存编辑
+function saveEdit() {
+    let no = document.getElementById('editTrainNo').value;
+    let type = document.getElementById('editType').value;
+    let date = document.getElementById('editDate').value;
+    let worker = document.getElementById('editWorker').value;
+    let mile = document.getElementById('editMile').value;
+    let count = document.getElementById('editCount').value;
+    let position = document.getElementById('editPosition').value;
+    let remark = document.getElementById('editRemark').value;
+    
+    if (!date || !worker || !mile || !count || !position) {
+        alert('请填写所有必填字段！');
+        return;
+    }
+    
+    // 更新列车数据
+    let trainIdx = trainData.findIndex(x => x.no === no);
+    if (trainIdx !== -1) {
+        trainData[trainIdx][type] = {
+            date: date,
+            mile: +mile,
+            worker: worker,
+            count: +count,
+            position: position
+        };
+    }
+    
+    // 更新历史记录
+    let historyIdx = historyData.findIndex(x => x.no === no && x.type === type);
+    if (historyIdx !== -1) {
+        historyData[historyIdx] = {
+            ...historyData[historyIdx],
+            date: date,
+            worker: worker,
+            mile: +mile,
+            count: +count,
+            position: position,
+            remark: remark
+        };
+    }
+    
+    saveTrain();
+    saveHistory();
+    
+    // 重新渲染
+    renderDashboard();
+    renderTrain();
+    renderPlan();
+    renderAnalysis();
+    renderHistory();
+    
+    closeEdit();
+    alert('换油记录保存成功！');
+}
+
+// Excel导出功能
+function exportExcel(type) {
+    let ws, wb, fileName;
+    
+    switch(type) {
+        case 'all':
+            // 导出全部换油数据
+            let allData = [];
+            trainData.forEach(train => {
+                ['gear', 'air', 'trac'].forEach(type => {
+                    let typeName = { gear: '齿轮箱油', air: '空压机油', trac: '牵引电机油' }[type];
+                    let day = dayDiff(train[type].date) + params[`${type}Time`];
+                    let leftMile = params[`${type}Mile`] - (train.mile - train[type].mile);
+                    let status = getStatus(day, leftMile).text;
+                    
+                    allData.push({
+                        列车车号: train.no,
+                        当前里程: train.mile,
+                        换油类型: typeName,
+                        上次换油日期: train[type].date,
+                        上次换油人: train[type].worker,
+                        上次换油里程: train[type].mile,
+                        更换次数: train[type].count,
+                        取样位置: train[type].position,
+                        剩余天数: Math.max(0, day),
+                        剩余公里: Math.max(0, leftMile),
+                        状态: status
+                    });
+                });
+            });
+            ws = XLSX.utils.json_to_sheet(allData);
+            fileName = '列车换油全部数据.xlsx';
+            break;
+            
+        case 'train':
+            // 导出列车换油数据
+            let trainExport = trainData.map(train => ({
+                列车车号: train.no,
+                当前里程: train.mile,
+                齿轮箱油换油日期: train.gear.date,
+                齿轮箱油换油人: train.gear.worker,
+                空压机油换油日期: train.air.date,
+                空压机油换油人: train.air.worker,
+                牵引电机油换油日期: train.trac.date,
+                牵引电机油换油人: train.trac.worker
+            }));
+            ws = XLSX.utils.json_to_sheet(trainExport);
+            fileName = '列车换油基础数据.xlsx';
+            break;
+            
+        case 'plan':
+            // 导出换油计划数据
+            let planExport = [];
+            trainData.forEach(train => {
+                ['gear', 'air', 'trac'].forEach(type => {
+                    let typeName = { gear: '齿轮箱油', air: '空压机油', trac: '牵引电机油' }[type];
+                    let day = dayDiff(train[type].date) + params[`${type}Time`];
+                    let leftMile = params[`${type}Mile`] - (train.mile - train[type].mile);
+                    let status = getStatus(day, leftMile).text;
+                    
+                    planExport.push({
+                        列车车号: train.no,
+                        换油类型: typeName,
+                        上次换油日期: train[type].date,
+                        上次换油人: train[type].worker,
+                        剩余天数: Math.max(0, day),
+                        剩余公里: Math.max(0, leftMile),
+                        状态: status
+                    });
+                });
+            });
+            ws = XLSX.utils.json_to_sheet(planExport);
+            fileName = '换油计划数据.xlsx';
+            break;
+            
+        case 'history':
+            // 导出换油历史记录
+            let historyExport = historyData.map(item => ({
+                列车车号: item.no,
+                换油类型: item.typeName,
+                换油日期: item.date,
+                换油人: item.worker,
+                换油里程: item.mile,
+                更换次数: item.count,
+                取样位置: item.position,
+                备注: item.remark
+            }));
+            ws = XLSX.utils.json_to_sheet(historyExport);
+            fileName = '换油历史记录.xlsx';
+            break;
+    }
+    
+    // 创建工作簿并导出
+    wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '换油数据');
+    XLSX.writeFile(wb, fileName);
+}
+</script>
+
+</body>
+</html>
